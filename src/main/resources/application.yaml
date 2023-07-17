@@ -1,0 +1,26 @@
+server:
+  port: 8090
+
+spring:
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: qnap
+
+qnap:
+  source: qnapclub_eu
+  sync-list:
+    -
+      id: qnapclub_eu
+      url: https://qnapclub.eu/en/repo.xml
+      cron: 0 0 0,12 * * *
+      verify-ssl: false
+
+storage:
+  access-key: xxxxxxxxxxxxxxxx
+  secret-key: xxxxxxxxxxxxxxxxxxxxxxxxxxx
+  bucket: xxxxxxxxxxx
+  region: xxxxxxxxxxxxxxxxx
+  end-point: xxxxxxxxxxxxxxxxxxxxxx
+  download-link: https://xxxxxxxxxxx.ossfiles.com/
