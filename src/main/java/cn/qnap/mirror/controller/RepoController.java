@@ -14,6 +14,13 @@ public class RepoController {
     @Autowired
     private RepoService repoService;
 
+    /**
+     * 请求获取repo.xml文件的处理方法
+     * 
+     * @param response HttpServletResponse对象，用于返回HTTP响应
+     * @return 返回repoService处理后的repo.xml文件内容
+     * @throws IOException 当处理过程中发生I/O异常时抛出
+     */
     @RequestMapping("/repo.xml")
     public String getRepo(HttpServletResponse response) throws IOException {
         return repoService.getRepo(response);

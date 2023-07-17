@@ -10,6 +10,6 @@ import java.util.Set;
 @Builder
 public class Platform {
     @Id
-    private String arch;
-    private Set<String> machine;
+    private String arch;            // 平台的架构标识符
+    private Set<String> machine;    // 支持的机器类型集合
 }

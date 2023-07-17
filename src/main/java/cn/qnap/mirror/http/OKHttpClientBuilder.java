@@ -10,17 +10,32 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
 public class OKHttpClientBuilder {
+    /**
+     * 构建OkHttpClient.Builder对象
+     * 
+     * @param verifySsl 是否验证SSL证书链
+     * @return OkHttpClient.Builder对象
+     */
     public static OkHttpClient.Builder buildOKHttpClient(boolean verifySsl) {
         try {
-                TrustManager[] trustAllCerts = buildTrustManagers();
+            // 创建TrustManager数组以接受所有证书
+            TrustManager[] trustAllCerts = buildTrustManagers();
+
+            // 初始化SSL上下文
             final SSLContext sslContext = SSLContext.getInstance("SSL");
             sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
 
+            // 获取SSLSocketFactory
             final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
+            // 创建OkHttpClient.Builder
             OkHttpClient.Builder builder = new OkHttpClient.Builder();
             builder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0]);
+
+            // 如果不需要验证SSL证书，设置hostnameVerifier为接受所有主机名
             if (!verifySsl)
                 builder.hostnameVerifier((hostname, session) -> true);
+
             return builder;
         } catch (NoSuchAlgorithmException | KeyManagementException e) {
             e.printStackTrace();
@@ -28,6 +43,11 @@ public class OKHttpClientBuilder {
         }
     }
 
+    /**
+     * 构建TrustManager数组以接受所有证书
+     * 
+     * @return 包含一个X509TrustManager对象的TrustManager数组
+     */
     private static TrustManager[] buildTrustManagers() {
         return new TrustManager[]{
             new X509TrustManager() {

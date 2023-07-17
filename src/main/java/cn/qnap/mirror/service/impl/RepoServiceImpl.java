@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDateTime;
@@ -46,23 +47,27 @@ public class RepoServiceImpl implements RepoService {
 
     @Override
     public String getRepo(HttpServletResponse response) throws IOException {
+        // 创建PackageXmlRoot对象，用于生成XML数据
         var packageXmlRoot = new PackageXmlRoot();
         packageXmlRoot.setCacheCheck(getLastUpdateDateTime());
         packageXmlRoot.setItems(generateItemList());
 
+        // 设置HTTP响应头，指定返回的是XML格式数据
         response.reset();
         response.setContentType("application/xml");
         response.setCharacterEncoding(FILE_ENCODE);
-        response.setHeader("Content-Disposition", "attachment;filename=" + FILE_NAME );
+        response.setHeader("Content-Disposition", "attachment;filename=" + FILE_NAME);
 
+        // 使用XmlMapper将PackageXmlRoot对象转换为XML字符串，并写入响应输出流
         var xmlMapper = new XmlMapper();
-        try(var write = new OutputStreamWriter(response.getOutputStream(), FILE_ENCODE)) {
+        try (var write = new OutputStreamWriter(response.getOutputStream(), FILE_ENCODE)) {
             xmlMapper.writerWithDefaultPrettyPrinter().writeValue(write, packageXmlRoot);
         }
         return "";
     }
 
     private String getLastUpdateDateTime() {
+        // 获取最后同步日期时间，并格式化为yyyyMMddHHmm的字符串
         var dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
         var syncDateTimeOption = syncDateTimeRepository.findById(source);
         LocalDateTime updateDateTime;
@@ -75,6 +80,7 @@ public class RepoServiceImpl implements RepoService {
     }
 
     private List<PackageXmlRoot.Item> generateItemList() {
+        // 生成镜像列表项
         List<PackageXmlRoot.Item> itemList = new ArrayList<>();
         mirrorRepository.findBySource(source).forEach(mirror -> {
             Mirror.Version version = mirror.getHistory().get(0);
@@ -102,7 +108,9 @@ public class RepoServiceImpl implements RepoService {
         });
         return itemList;
     }
+
     private List<PackageXmlRoot.Platform> generatePlatformList(String name, String version, Set<String> archSet) {
+        // 生成平台列表项
         List<PackageXmlRoot.Platform> platformList = new ArrayList<>();
         Map<String, Platform> platformMap = getPlatform();
         archSet.forEach(arch -> {
@@ -128,6 +136,7 @@ public class RepoServiceImpl implements RepoService {
     }
 
     private Map<String, Platform> getPlatform() {
+        // 获取平台信息并缓存
         if (platformMap != null) {
             return platformMap;
         }
