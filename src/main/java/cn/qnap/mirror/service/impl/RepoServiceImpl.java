@@ -12,10 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.Setter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDateTime;
@@ -66,6 +63,10 @@ public class RepoServiceImpl implements RepoService {
         return "";
     }
 
+    /**
+     * 获取最后一次更新日期和时间
+     * @return 最后一次更新日期和时间
+     */
     private String getLastUpdateDateTime() {
         // 获取最后同步日期时间，并格式化为yyyyMMddHHmm的字符串
         var dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
@@ -79,6 +80,10 @@ public class RepoServiceImpl implements RepoService {
         return updateDateTime.format(dateTimeFormatter);
     }
 
+    /**
+     * 生成item列表
+     * @return item列表
+     */
     private List<PackageXmlRoot.Item> generateItemList() {
         // 生成镜像列表项
         List<PackageXmlRoot.Item> itemList = new ArrayList<>();
@@ -109,6 +114,13 @@ public class RepoServiceImpl implements RepoService {
         return itemList;
     }
 
+    /**
+     * 生成平台列表
+     * @param name 包名
+     * @param version 包版本
+     * @param archSet 构架列表
+     * @return 平台列表
+     */
     private List<PackageXmlRoot.Platform> generatePlatformList(String name, String version, Set<String> archSet) {
         // 生成平台列表项
         List<PackageXmlRoot.Platform> platformList = new ArrayList<>();
@@ -135,6 +147,10 @@ public class RepoServiceImpl implements RepoService {
         return platformList;
     }
 
+    /**
+     * 获取构架和平台列表
+     * @return 构架和平台Map
+     */
     private Map<String, Platform> getPlatform() {
         // 获取平台信息并缓存
         if (platformMap != null) {

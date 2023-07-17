@@ -58,15 +58,13 @@ public class S3Storage implements Storage {
 
     @Override
     public InputStream readFile(String filePath) throws IOException {
-        // TODO: 实现从S3存储桶中读取文件，并返回InputStream对象
-        // 可以参考以下代码示例
-        /*
-        var request = GetObjectRequest.builder()
-                .bucket(getBucketFullPath(filePath));
-        var responseTransformer = ResponseTransformer.toInputStream();
-        return s3.getObject(request, responseTransformer);
-        */
-        return null;
+        // 获取S3文件的流
+        var request = GetObjectRequest
+                .builder()
+                .bucket(bucket)
+                .key(filePath)
+                .build();
+        return s3.getObject(request);
     }
 
     @Override

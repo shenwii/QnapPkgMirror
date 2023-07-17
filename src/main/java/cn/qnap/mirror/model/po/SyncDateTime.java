@@ -10,6 +10,6 @@ import java.time.LocalDateTime;
 @Builder
 public class SyncDateTime {
     @Id
-    private String source;                      // 同步源的标识符
-    private LocalDateTime updateDateTime;      // 上次同步的日期和时间
+    private String source;                     // 同步源的标识符
+    private LocalDateTime updateDateTime;      // 最后一次同步的日期和时间
 }
