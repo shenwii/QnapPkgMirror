@@ -43,7 +43,7 @@ public class SyncScheduling implements SchedulingConfigurer {
 
     @Autowired
     private S3Storage s3Storage;
-    private final Map<String, String>CONTENT_MAP = new HashMap<>() {
+    private final Map<String, String> CONTENT_MAP = new HashMap<>() {
         {
             put("gif", "image/gif");
             put("png", "image/png");
@@ -54,6 +54,7 @@ public class SyncScheduling implements SchedulingConfigurer {
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        // 配置定时任务
         syncList.forEach(syncCo -> {
             try {
                 taskRegistrar.addCronTask(new SyncJob(syncCo), syncCo.getCron());
@@ -74,6 +75,7 @@ public class SyncScheduling implements SchedulingConfigurer {
 
         @Override
         public void run() {
+            // 创建OkHttpClient，并发送HTTP请求获取镜像信息
             var okHttpClient = OKHttpClientBuilder.buildOKHttpClient(syncCo.isVerifySsl())
                     .build();
             var request = new Request.Builder().url(syncCo.getUrl()).build();
@@ -87,6 +89,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                 e.printStackTrace();
                 return;
             }
+            // 解析XML格式的镜像信息
             responseStr = responseStr.replaceAll("<changeLog></changeLog>", "");
             PackageXmlRoot packageXmlRoot;
             try {
@@ -96,6 +99,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                 e.printStackTrace();
                 return;
             }
+            // 获取已有的镜像和平台信息，以便进行更新
             var mirrorMap = getMirror(syncCo.getId());
             var platformMap = getPlatform();
             packageXmlRoot.getItems().forEach(item -> {
@@ -105,6 +109,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                 } else {
                     mirrorDto = new Mirror();
                 }
+                // 更新镜像信息
                 mirrorDto.setSource(syncCo.getId());
                 mirrorDto.setName(item.getName());
                 mirrorDto.setChangeLog(item.getChangeLog());
@@ -112,16 +117,17 @@ public class SyncScheduling implements SchedulingConfigurer {
                 mirrorDto.setType(item.getType());
                 mirrorDto.setDescription(item.getDescription());
                 mirrorDto.setFwVersion(item.getFwVersion());
-                String iconUrl = item.getIcon80().equals("")? item.getIcon100(): item.getIcon80();
+                String iconUrl = item.getIcon80().equals("") ? item.getIcon100() : item.getIcon80();
+                // 解析平台信息，并更新镜像的历史版本列表
                 var xmlPlatformMap = parsePlatforms(item.getName(), item.getVersion(), item.getPlatforms());
-                String currentVersion = mirrorDto.getHistory().size() == 0? null: mirrorDto.getHistory().get(0).getVersion();
+                String currentVersion = mirrorDto.getHistory().size() == 0 ? null : mirrorDto.getHistory().get(0).getVersion();
                 if (!item.getVersion().equals(currentVersion)) {
                     var version = Mirror.Version.builder()
                             .version(item.getVersion())
                             .publishedDate(item.getPublishedDate())
                             .archList(xmlPlatformMap.keySet())
                             .build();
-                    for(Map<String, Object> map: xmlPlatformMap.values()) {
+                    for (Map<String, Object> map : xmlPlatformMap.values()) {
                         String url = (String) map.get("url");
                         try {
                             uploadFile(url, s3BasePath
@@ -136,11 +142,13 @@ public class SyncScheduling implements SchedulingConfigurer {
                             e.printStackTrace();
                             return;
                         }
+                        // 记录同步日期时间
                         syncDateTimeRepository.save(SyncDateTime.builder()
-                                        .source(syncCo.getId())
-                                        .updateDateTime(LocalDateTime.now())
-                                        .build());
+                                .source(syncCo.getId())
+                                .updateDateTime(LocalDateTime.now())
+                                .build());
                     }
+                    // 上传图标文件
                     if (!iconUrl.equals("")) {
                         String icon = iconUrl.substring(iconUrl.lastIndexOf("/") + 1);
                         try {
@@ -153,34 +161,40 @@ public class SyncScheduling implements SchedulingConfigurer {
                     }
                     mirrorDto.getHistory().add(0, version);
                 }
+                // 更新平台信息
                 xmlPlatformMap.forEach((arch, map) -> {
                     if (platformMap.containsKey(arch)) {
                         platformMap.get(arch).getMachine().addAll((Set<String>) map.get("machines"));
                     } else {
                         platformMap.put(arch, Platform.builder()
-                                        .arch(arch)
-                                        .machine((Set<String>) map.get("machines"))
-                                        .build());
+                                .arch(arch)
+                                .machine((Set<String>) map.get("machines"))
+                                .build());
                     }
                 });
+                // 保存镜像信息
                 mirrorDto.setMaintainer(item.getMaintainer());
                 mirrorDto.setDeveloper(item.getDeveloper());
                 mirrorDto.setLanguage(item.getLanguage());
                 mirrorDto.setTutorialLink(item.getTutorialLink());
                 mirrorRepository.save(mirrorDto);
             });
+            // 保存平台信息
             platformRepository.saveAll(platformMap.values());
         }
 
         private Map<String, Mirror> getMirror(String source) {
             Map<String, Mirror> result = new HashMap<>();
+            // 查询数据库获取同步源对应的镜像列表
             mirrorRepository.findBySource(source).forEach(mirror -> {
                 result.put(mirror.getName(), mirror);
             });
             return result;
         }
+
         private Map<String, Platform> getPlatform() {
             Map<String, Platform> result = new HashMap<>();
+            // 查询数据库获取所有平台信息
             platformRepository.findAll().forEach(platform -> {
                 result.put(platform.getArch(), platform);
             });
@@ -213,12 +227,14 @@ public class SyncScheduling implements SchedulingConfigurer {
                     throw new IOException("download file failed");
                 }
                 String fileExt = url.substring(url.lastIndexOf(".") + 1);
+                // 上传文件到S3存储
                 s3Storage.writeFile(response.body().byteStream(), filePath, response.body().contentLength(), getContentType(fileExt));
             }
         }
+
         private String getContentType(String fileExt) {
             final String defaultContentType = "application/octet-stream";
-            if(fileExt == null)
+            if (fileExt == null)
                 return defaultContentType;
             String fileExtLow = fileExt.toLowerCase();
             return CONTENT_MAP.getOrDefault(fileExtLow, defaultContentType);
