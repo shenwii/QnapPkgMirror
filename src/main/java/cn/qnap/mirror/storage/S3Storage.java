@@ -14,6 +14,8 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * S3Storage类实现了Storage接口，用于与S3存储服务交互。
@@ -24,6 +26,7 @@ public class S3Storage implements Storage {
     private String bucket; // 存储桶名称
     @Getter
     private String downloadLink; // 文件下载链接的前缀
+    private static int BUFFER_LEN = 4 * 1024 * 1024; // 缓冲区大小
 
     private S3Client s3;
 
@@ -45,15 +48,41 @@ public class S3Storage implements Storage {
 
     @Override
     public void writeFile(InputStream sourceSteam, String targetFile, Long length, String contentType) throws IOException {
-        // 将数据写入S3存储桶中
-        var request = PutObjectRequest.builder()
+        // 创建分块上传请求
+        var createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
                 .bucket(bucket)
-                .contentType(contentType)
                 .key(targetFile)
-                .contentLength(length)
                 .build();
-        var requestBody = RequestBody.fromInputStream(sourceSteam, length);
-        s3.putObject(request, requestBody);
+        // 准备上传
+        var response = s3.createMultipartUpload(createMultipartUploadRequest);
+        // 获取上传ID
+        var uploadId = response.uploadId();
+        // 分片上传
+        List<CompletedPart> partList = new ArrayList<>();
+        while (length > 0) {
+            long updateLength = length > BUFFER_LEN? BUFFER_LEN: length;
+            var uploadPartRequest = UploadPartRequest.builder()
+                    .bucket(bucket)
+                    .key(targetFile)
+                    .uploadId(uploadId)
+                    .partNumber(partList.size() + 1).build();
+            var etag = s3.uploadPart(uploadPartRequest, RequestBody.fromInputStream(sourceSteam, updateLength)).eTag();
+            var completedPart = CompletedPart.builder().partNumber(partList.size() + 1).eTag(etag).build();
+            partList.add(completedPart);
+            length -= updateLength;
+        }
+        var completedMultipartUpload = CompletedMultipartUpload.builder()
+                .parts(partList)
+                .build();
+        var completeMultipartUploadRequest =
+                CompleteMultipartUploadRequest.builder()
+                        .bucket(bucket)
+                        .key(targetFile)
+                        .uploadId(uploadId)
+                        .multipartUpload(completedMultipartUpload)
+                        .build();
+        // 完成上传
+        s3.completeMultipartUpload(completeMultipartUploadRequest);
     }
 
     @Override

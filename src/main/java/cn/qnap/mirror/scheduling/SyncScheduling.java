@@ -234,7 +234,15 @@ public class SyncScheduling implements SchedulingConfigurer {
                 // 截取最后一位/以后的文件名
                 var fileName = platform.getLocation().substring(platform.getLocation().lastIndexOf("/") + 1);
                 // 从文件名中解析出构架
-                var arch = fileName.substring(name.length() + version.length() + 2, fileName.length() - 5);
+                String arch;
+                try {
+                    arch = fileName.substring(name.length() + version.length() + 2, fileName.length() - 5);
+                } catch (Throwable e) {
+                    System.err.println("fileName = " + fileName);
+                    System.err.println("name = " + name);
+                    System.err.println("version = " + version);
+                    throw e;
+                }
                 if (!result.containsKey(arch)) {
                     Map<String, Object> map = new HashMap<>();
                     map.put("arch", arch);
