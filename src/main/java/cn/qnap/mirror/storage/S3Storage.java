@@ -1,12 +1,12 @@
 package cn.qnap.mirror.storage;
 
 import com.mongodb.internal.bulk.DeleteRequest;
+import io.minio.MinioClient;
 import lombok.Getter;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -20,13 +20,15 @@ import java.util.List;
 /**
  * S3Storage类实现了Storage接口，用于与S3存储服务交互。
  */
-@Component
+@Component("s3Storage")
 public class S3Storage implements Storage {
     @Getter
     private String bucket; // 存储桶名称
     @Getter
     private String downloadLink; // 文件下载链接的前缀
+    private Configure configure; // 配置
     private static int BUFFER_LEN = 4 * 1024 * 1024; // 缓冲区大小
+    private boolean isRegister = false;
 
     private S3Client s3;
 
@@ -38,12 +40,20 @@ public class S3Storage implements Storage {
     public S3Storage(Configure configure) {
         bucket = configure.getBucket();
         downloadLink = configure.getDownloadLink();
+        this.configure = configure;
+    }
+
+    protected void register() {
+        if (isRegister) {
+            return;
+        }
         // 使用存储访问密钥和终端节点构建S3存储客户端
         AwsSessionCredentials awsCreds = AwsSessionCredentials.create(configure.getAccessKey(), configure.getSecretKey(), "");
         s3 = S3Client.builder().credentialsProvider(StaticCredentialsProvider.create(awsCreds))
                 .endpointOverride(URI.create(configure.getEndPoint()))
                 .region(Region.of(configure.getRegion()))
                 .build();
+        isRegister = true;
     }
 
     @Override

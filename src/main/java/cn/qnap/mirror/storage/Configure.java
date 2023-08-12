@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "storage")
 @Data
 public class Configure {
+    private String type; // 类型
     private String accessKey; // 存储访问密钥
     private String secretKey; // 存储访问密钥对应的秘钥
     private String bucket; // 存储桶名称

@@ -9,7 +9,8 @@ import cn.qnap.mirror.model.xml.PackageXmlRoot;
 import cn.qnap.mirror.repository.MirrorRepository;
 import cn.qnap.mirror.repository.PlatformRepository;
 import cn.qnap.mirror.repository.SyncDateTimeRepository;
-import cn.qnap.mirror.storage.S3Storage;
+import cn.qnap.mirror.storage.Storage;
+import cn.qnap.mirror.storage.StorageFactory;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import lombok.Setter;
 import okhttp3.Request;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Configuration
 @ConfigurationProperties(prefix = "qnap")
@@ -42,7 +44,10 @@ public class SyncScheduling implements SchedulingConfigurer {
     private SyncDateTimeRepository syncDateTimeRepository;
 
     @Autowired
-    private S3Storage s3Storage;
+    private StorageFactory storageFactory;
+
+    private Storage storage;
+
     private final Map<String, String> CONTENT_MAP = new HashMap<>() { //图片的媒体类型
         {
             put("gif", "image/gif");
@@ -54,6 +59,7 @@ public class SyncScheduling implements SchedulingConfigurer {
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        storage = storageFactory.getStorage();
         // 配置定时任务
         syncList.forEach(syncCo -> {
             try {
@@ -108,7 +114,9 @@ public class SyncScheduling implements SchedulingConfigurer {
             // 获取当前的镜像中存的包列表
             var mirrorMap = getMirror(syncCo.getId());
             // 获取构架和平台列表
-            var platformMap = getPlatform();
+            var platformMap = getPlatform(packageXmlRoot);
+            // 保存构架和平台信息
+            platformRepository.saveAll(platformMap.values());
             packageXmlRoot.getItems().forEach(item -> { //循环xml中的信息
                 Mirror mirrorDto;
                 // 如果该包已存在，则取出，否则新建一个
@@ -127,7 +135,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                 mirrorDto.setFwVersion(item.getFwVersion());
                 String iconUrl = item.getIcon80().equals("") ? item.getIcon100() : item.getIcon80();
                 // 解析构架和平台的关系
-                var xmlPlatformMap = parsePlatforms(item.getName(), item.getVersion(), item.getPlatforms());
+                var xmlPlatformMap = parsePlatforms(platformMap, item.getPlatforms());
                 // 取出当前的版本信息
                 String currentVersion = mirrorDto.getHistory().size() == 0 ? null : mirrorDto.getHistory().get(0).getVersion();
                 // 如果版本不一致，则更新版本
@@ -137,9 +145,8 @@ public class SyncScheduling implements SchedulingConfigurer {
                             .publishedDate(item.getPublishedDate())
                             .archList(xmlPlatformMap.keySet())
                             .build();
-                    for (Map<String, Object> map : xmlPlatformMap.values()) {
+                    xmlPlatformMap.forEach((arch, url) -> {
                         // 将每个包上传到S3服务器
-                        String url = (String) map.get("url");
                         try {
                             uploadFile(url, s3BasePath
                                     + "packages/"
@@ -147,7 +154,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                                     + "_"
                                     + item.getVersion()
                                     + "_"
-                                    + map.get("arch")
+                                    + arch
                                     + ".qpkg");
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -158,7 +165,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                                 .source(syncCo.getId())
                                 .updateDateTime(LocalDateTime.now())
                                 .build());
-                    }
+                    });
                     // 上传图标文件
                     if (!iconUrl.equals("")) {
                         String icon = iconUrl.substring(iconUrl.lastIndexOf("/") + 1);
@@ -173,17 +180,6 @@ public class SyncScheduling implements SchedulingConfigurer {
                     // 将最新版本插入到第一条
                     mirrorDto.getHistory().add(0, version);
                 }
-                // 更新构架和平台信息
-                xmlPlatformMap.forEach((arch, map) -> {
-                    if (platformMap.containsKey(arch)) {
-                        platformMap.get(arch).getMachine().addAll((Set<String>) map.get("machines"));
-                    } else {
-                        platformMap.put(arch, Platform.builder()
-                                .arch(arch)
-                                .machine((Set<String>) map.get("machines"))
-                                .build());
-                    }
-                });
                 // 保存镜像信息
                 mirrorDto.setMaintainer(item.getMaintainer());
                 mirrorDto.setDeveloper(item.getDeveloper());
@@ -191,8 +187,6 @@ public class SyncScheduling implements SchedulingConfigurer {
                 mirrorDto.setTutorialLink(item.getTutorialLink());
                 mirrorRepository.save(mirrorDto);
             });
-            // 保存构架和平台信息
-            platformRepository.saveAll(platformMap.values());
         }
 
         /**
@@ -213,44 +207,56 @@ public class SyncScheduling implements SchedulingConfigurer {
          * 获取构架和平台关系
          * @return 构架和平台Map
          */
-        private Map<String, Platform> getPlatform() {
+        private Map<String, Platform> getPlatform(PackageXmlRoot packageXmlRoot) {
+            Pattern archPattern = Pattern.compile(".*_((arm|x86).+)$");
             Map<String, Platform> result = new HashMap<>();
             platformRepository.findAll().forEach(platform -> {
                 result.put(platform.getArch(), platform);
+            });
+            packageXmlRoot.getItems().forEach(item -> {
+                item.getPlatforms().forEach(platform -> {
+                    // 截取最后一位/以后的文件名
+                    var fileName = platform.getLocation().substring(platform.getLocation().lastIndexOf("/") + 1);
+                    // 从文件名中解析出构架
+                    String arch;
+                    try {
+                        fileName = fileName.substring(0, fileName.lastIndexOf("."));
+                        var match = archPattern.matcher(fileName);
+                        if (!match.matches()) {
+                            return;
+                        }
+                        arch = match.group(1).toLowerCase().replaceAll("_", "-");
+                    } catch (Throwable e) {
+                        return;
+                    }
+                    Platform platformTmp;
+                    if (!result.containsKey(arch)) {
+                        platformTmp = Platform.builder()
+                                .arch(arch)
+                                .machine(new HashSet<String>())
+                                .build();
+                        result.put(arch, platformTmp);
+                    }
+                    result.get(arch).getMachine().add(platform.getPlatformID());
+                });
             });
             return result;
         }
 
         /**
          * 解析出构架和平台的关系
-         * @param name 包名
-         * @param version 包版本
+         * @param platformMap 构架和平台关系
          * @param platformList 平台列表
          * @return 解析好的Map
          */
-        private Map<String, Map<String, Object>> parsePlatforms(String name, String version, List<PackageXmlRoot.Platform> platformList) {
-            Map<String, Map<String, Object>> result = new HashMap<>();
+        private Map<String, String> parsePlatforms(Map<String, Platform> platformMap, List<PackageXmlRoot.Platform> platformList) {
+            Map<String, String> result = new HashMap<>();
             platformList.forEach(platform -> {
-                // 截取最后一位/以后的文件名
-                var fileName = platform.getLocation().substring(platform.getLocation().lastIndexOf("/") + 1);
-                // 从文件名中解析出构架
-                String arch;
-                try {
-                    arch = fileName.substring(name.length() + version.length() + 2, fileName.length() - 5);
-                } catch (Throwable e) {
-                    System.err.println("fileName = " + fileName);
-                    System.err.println("name = " + name);
-                    System.err.println("version = " + version);
-                    throw e;
-                }
-                if (!result.containsKey(arch)) {
-                    Map<String, Object> map = new HashMap<>();
-                    map.put("arch", arch);
-                    map.put("url", platform.getLocation());
-                    map.put("machines", new HashSet<String>());
-                    result.put(arch, map);
-                }
-                ((Set<String>) result.get(arch).get("machines")).add(platform.getPlatformID());
+                platformMap.forEach((arch, platformTmp) -> {
+                    if (platformTmp.getMachine().contains(platform.getPlatformID()) && !result.containsKey(arch)) {
+                        result.put(arch, platform.getLocation());
+                    }
+                });
             });
             return result;
         }
@@ -271,7 +277,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                 }
                 String fileExt = url.substring(url.lastIndexOf(".") + 1);
                 // 上传文件到存储
-                s3Storage.writeFile(response.body().byteStream(), filePath, response.body().contentLength(), getContentType(fileExt));
+                storage.writeFile(response.body().byteStream(), filePath, response.body().contentLength(), getContentType(fileExt));
             }
         }
 

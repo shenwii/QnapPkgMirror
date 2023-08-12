@@ -1,13 +1,21 @@
 package cn.qnap.mirror.http;
 
+import okhttp3.Dns;
 import okhttp3.OkHttpClient;
+import org.jetbrains.annotations.NotNull;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 public class OKHttpClientBuilder {
     /**
@@ -31,6 +39,10 @@ public class OKHttpClientBuilder {
             // 创建OkHttpClient.Builder
             OkHttpClient.Builder builder = new OkHttpClient.Builder();
             builder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0]);
+            builder.dns(host -> {
+                var inetAddresses = InetAddress.getAllByName(host);
+                return Arrays.stream(inetAddresses).sorted(Comparator.comparingInt(obj -> (obj instanceof Inet6Address ? 0 : 1))).toList();
+            });
 
             // 如果不需要验证SSL证书，设置hostnameVerifier为接受所有主机名
             if (!verifySsl)
