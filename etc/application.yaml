@@ -18,6 +18,7 @@ qnap:
       verify-ssl: false
 
 storage:
+  type: minio
   access-key: xxxxxxxxxxxxxxxx
   secret-key: xxxxxxxxxxxxxxxxxxxxxxxxxxx
   bucket: xxxxxxxxxxx
