@@ -168,7 +168,7 @@ public class SyncScheduling implements SchedulingConfigurer {
                     });
                     // 上传图标文件
                     if (!iconUrl.equals("")) {
-                        String icon = iconUrl.substring(iconUrl.lastIndexOf("/") + 1);
+                        String icon = item.getName() + iconUrl.substring(iconUrl.lastIndexOf("."));
                         try {
                             uploadFile(iconUrl, s3BasePath + "icon/" + icon);
                         } catch (Exception e) {

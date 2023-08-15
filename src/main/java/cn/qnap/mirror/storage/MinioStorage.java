@@ -2,6 +2,7 @@ package cn.qnap.mirror.storage;
 
 import cn.qnap.mirror.http.OKHttpClientBuilder;
 import io.minio.*;
+import io.minio.errors.ErrorResponseException;
 import lombok.Getter;
 import org.springframework.stereotype.Component;
 
@@ -49,6 +50,16 @@ public class MinioStorage implements Storage {
     @Override
     public void writeFile(InputStream sourceSteam, String targetFile, Long length, String contentType) throws IOException {
         // 创建分块上传请求
+        try {
+            GetObjectResponse response = minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(targetFile)
+                    .build());
+            return;
+        } catch (ErrorResponseException e) {
+        } catch (Exception e) {
+            throw new IOException(e.getMessage());
+        }
         try {
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(bucket)
