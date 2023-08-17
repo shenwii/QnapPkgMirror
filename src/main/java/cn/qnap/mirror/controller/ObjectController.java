@@ -17,7 +17,7 @@ public class ObjectController {
     @RequestMapping("/object/**")
     public void getObject(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
-        String object = path.replaceAll("^/object/", "");
+        String object = path.replaceAll("^/*object/", "");
         objectService.getObject(response, object);
     }
 }
